@@ -1,2 +1,4 @@
 pytelegrambotapi
 requests
+psycopg2-binary
+schedule
