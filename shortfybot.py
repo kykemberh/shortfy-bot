@@ -9,21 +9,10 @@ BOT_TOKEN = "8973743279:AAGk0bLOogSENf2weOGwwASSICG6EOYM4PE"
 GROQ_KEY = "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"
 
 bot = telebot.TeleBot(BOT_TOKEN)
-
-# ===== ДАНІ В ПАМ'ЯТІ =====
 users = {}
 user_history = {}
 daily_trend = {"trend": None}
 
-def register_user(uid, username):
-    if uid not in users:
-        users[uid] = {"username": username, "niche": None, "generations": 0}
-
-def get_leaderboard():
-    sorted_users = sorted(users.items(), key=lambda x: x[1]["generations"], reverse=True)
-    return [(v["username"], v["generations"]) for k, v in sorted_users[:10]]
-
-# ===== GROQ =====
 def ask_groq(messages):
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {
@@ -66,17 +55,15 @@ def add_to_history(uid, role, content):
     if len(history) > 20:
         user_history[uid] = [history[0]] + history[-10:]
 
-# ===== МЕНЮ =====
 def main_menu():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.add("🎬 Згенерувати сценарій")
     markup.add("🔥 Трендова ідея дня", "📅 Контент план на 7 днів")
     markup.add("📊 Аналіз каналу", "🎯 A/B тест хуків")
-    markup.add("💰 Як заробити онлайн", "🏆 Лідерборд")
-    markup.add("⚙️ Моя ніша", "💬 Чат з AI")
+    markup.add("💰 Як заробити онлайн", "⚙️ Моя ніша")
+    markup.add("💬 Чат з AI")
     return markup
 
-# ===== ЩОДЕННІ ПОВІДОМЛЕННЯ =====
 def send_daily_motivation():
     prompt = "Give a short powerful morning motivation (3 sentences) for content creators trying to grow online. Then give 1 specific actionable tip for today."
     try:
@@ -103,12 +90,12 @@ def schedule_jobs():
         schedule.run_pending()
         time.sleep(60)
 
-# ===== ХЕНДЛЕРИ =====
 @bot.message_handler(commands=['start'])
 def start(message):
     uid = message.chat.id
     username = message.from_user.username or message.from_user.first_name
-    register_user(uid, username)
+    if uid not in users:
+        users[uid] = {"username": username, "niche": None}
 
     niche = users[uid]["niche"]
     niche_text = f"Твоя ніша: *{niche}*" if niche else "Ніша не вказана — натисни ⚙️ Моя ніша"
@@ -127,19 +114,12 @@ def handle(message):
     uid = message.chat.id
     text = message.text
     username = message.from_user.username or message.from_user.first_name
-    register_user(uid, username)
-
-    if text == "🏆 Лідерборд":
-        medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
-        rows = get_leaderboard()
-        msg = "🏆 *Топ користувачів:*\n\n"
-        for i, (uname, gens) in enumerate(rows):
-            msg += f"{medals[i]} @{uname} — {gens} генерацій\n"
-        bot.send_message(uid, msg, parse_mode="Markdown", reply_markup=main_menu())
-        return
+    if uid not in users:
+        users[uid] = {"username": username, "niche": None}
 
     if text == "🔥 Трендова ідея дня":
         if not daily_trend["trend"]:
+            bot.send_message(uid, "⏳ Генерую трендову ідею...")
             generate_daily_trend()
         bot.send_message(uid, f"🔥 *Трендова ідея дня:*\n\n{daily_trend['trend']}", parse_mode="Markdown", reply_markup=main_menu())
         return
@@ -168,7 +148,6 @@ def handle(message):
         add_to_history(uid, "user", prompt)
         reply = ask_groq(get_history(uid))
         add_to_history(uid, "assistant", reply)
-        users[uid]["generations"] += 1
         bot.send_message(uid, reply, reply_markup=main_menu())
         return
 
@@ -179,7 +158,6 @@ def handle(message):
         add_to_history(uid, "user", prompt)
         reply = ask_groq(get_history(uid))
         add_to_history(uid, "assistant", reply)
-        users[uid]["generations"] += 1
         bot.send_message(uid, reply, reply_markup=main_menu())
         return
 
@@ -211,7 +189,6 @@ def handle(message):
         add_to_history(uid, "user", money_topics[text])
         reply = ask_groq(get_history(uid))
         add_to_history(uid, "assistant", reply)
-        users[uid]["generations"] += 1
         bot.send_message(uid, reply, reply_markup=main_menu())
         return
 
@@ -232,12 +209,10 @@ def handle(message):
     try:
         reply = ask_groq(get_history(uid))
         add_to_history(uid, "assistant", reply)
-        users[uid]["generations"] += 1
         bot.send_message(uid, reply, reply_markup=main_menu())
         bot.send_message(uid, "🔗 Поділись ботом: @shortfypromt_bot")
     except Exception as e:
         bot.send_message(uid, f"❌ Помилка: {str(e)}")
 
-# ===== ЗАПУСК =====
 threading.Thread(target=schedule_jobs, daemon=True).start()
 bot.polling()
